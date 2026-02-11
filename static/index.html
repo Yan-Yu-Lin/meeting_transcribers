@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Transcriber</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1 id="app-title">Meeting Transcriber</h1>
+    <nav>
+      <button class="nav-btn active" data-view="record">Record</button>
+      <button class="nav-btn" data-view="history">Past Meetings</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Record View -->
+    <section id="view-record" class="view active">
+      <div class="record-controls">
+        <input type="text" id="meeting-title" placeholder="Meeting title (optional)">
+        <select id="language-select">
+          <option value="">Auto-detect</option>
+          <option value="eng">English</option>
+          <option value="zho">Chinese (Mandarin)</option>
+          <option value="jpn">Japanese</option>
+          <option value="kor">Korean</option>
+          <option value="spa">Spanish</option>
+          <option value="fra">French</option>
+          <option value="deu">German</option>
+          <option value="por">Portuguese</option>
+          <option value="ita">Italian</option>
+          <option value="nld">Dutch</option>
+          <option value="rus">Russian</option>
+          <option value="ara">Arabic</option>
+        </select>
+        <div class="button-row">
+          <button id="btn-record" class="btn-primary">Start Recording</button>
+          <button id="btn-stop" class="btn-danger" disabled>Stop</button>
+        </div>
+      </div>
+      <div id="recording-status" class="hidden">
+        <div class="status-bar">
+          <span class="pulse-dot"></span>
+          <span id="recording-timer">00:00</span>
+        </div>
+      </div>
+      <div id="mic-error" class="error-banner hidden"></div>
+      <div id="transcript-area" class="hidden">
+        <h3>Live Transcript</h3>
+        <div id="transcript-content">
+          <div id="committed-segments"></div>
+          <div id="partial-text" class="partial"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- History View -->
+    <section id="view-history" class="view">
+      <div id="meetings-list"></div>
+      <div id="no-meetings" class="empty-state hidden">
+        <p>No meetings recorded yet.</p>
+        <p>Click "Record" to start your first transcription.</p>
+      </div>
+    </section>
+
+    <!-- Detail View -->
+    <section id="view-detail" class="view">
+      <button id="btn-back" class="btn-secondary">&larr; Back to meetings</button>
+      <div id="detail-content">
+        <h2 id="detail-title"></h2>
+        <div class="detail-meta">
+          <span id="detail-date"></span>
+          <span id="detail-duration"></span>
+          <span id="detail-status" class="status-badge"></span>
+        </div>
+        <div id="audio-player-container" class="hidden">
+          <audio id="audio-player" controls></audio>
+        </div>
+        <div id="detail-transcript">
+          <h3>Transcript</h3>
+          <div id="detail-segments"></div>
+        </div>
+        <button id="btn-delete" class="btn-danger">Delete Meeting</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
