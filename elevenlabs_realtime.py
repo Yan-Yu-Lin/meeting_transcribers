@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import contextlib
 import datetime as dt
 import os
 import queue
@@ -297,12 +298,23 @@ class ElevenLabsRealtimeTranscriber:
             }
             await connection.send(payload)
 
+    async def _periodic_commit_loop(self, connection) -> None:
+        # Streaming mode: commit on a timer so transcript segments keep flowing
+        # without waiting for server-side VAD silence.
+        while not self.stop_event.is_set():
+            await asyncio.sleep(self.args.streaming_commit_secs)
+            if self.stop_event.is_set():
+                break
+            try:
+                await connection.commit()
+            except Exception:
+                # Errors are surfaced by realtime error events; keep loop alive.
+                continue
+
     def _build_options(self) -> RealtimeAudioOptions:
-        strategy = (
-            CommitStrategy.VAD
-            if self.args.commit_strategy == "vad"
-            else CommitStrategy.MANUAL
-        )
+        strategy = CommitStrategy.VAD
+        if self.args.commit_strategy in {"manual", "streaming"}:
+            strategy = CommitStrategy.MANUAL
 
         kwargs = {
             "model_id": self.args.model,
@@ -354,6 +366,9 @@ class ElevenLabsRealtimeTranscriber:
             print("")
 
         sender_task = asyncio.create_task(self._sender_loop(connection))
+        commit_task = None
+        if self.args.commit_strategy == "streaming":
+            commit_task = asyncio.create_task(self._periodic_commit_loop(connection))
 
         try:
             with sd.InputStream(
@@ -370,6 +385,10 @@ class ElevenLabsRealtimeTranscriber:
             pass
         finally:
             self.stop_event.set()
+            if commit_task:
+                commit_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await commit_task
             await sender_task
             await connection.commit()
             await asyncio.sleep(self.args.final_commit_wait_secs)
@@ -392,9 +411,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--commit-strategy",
-        choices=["vad", "manual"],
+        choices=["vad", "manual", "streaming"],
         default="vad",
-        help="Segment commit strategy (default: vad)",
+        help="Segment mode: vad, manual, or streaming (default: vad)",
     )
     parser.add_argument(
         "--sample-rate", type=int, default=16000, help="PCM sample rate"
@@ -469,6 +488,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.8,
         help="Wait time after final commit before close",
+    )
+    parser.add_argument(
+        "--streaming-commit-secs",
+        type=float,
+        default=1.2,
+        help="In streaming mode, seconds between timed commits",
     )
     return parser
 

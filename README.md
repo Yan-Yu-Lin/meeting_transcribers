@@ -51,6 +51,14 @@ uv run python elevenlabs_realtime.py \
   --vad-threshold 0.4
 ```
 
+Streaming mode example (continuous streaming with timed commits):
+
+```bash
+uv run python elevenlabs_realtime.py \
+  --commit-strategy streaming \
+  --streaming-commit-secs 1.2
+```
+
 Environment:
 - Set `ELEVENLABS_API_KEY` in your environment or `.env`.
 
