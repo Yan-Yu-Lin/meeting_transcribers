@@ -80,6 +80,9 @@ class ElevenLabsRealtimeTranscriber:
 
         self.write_lock = threading.Lock()
         self.segment_index = 0
+        self.last_partial_text = ""
+        self.partial_line_active = False
+        self.partial_render_len = 0
 
         self.stream_wav = wave.open(str(self.stream_wav_path), "wb")
         self.stream_wav.setnchannels(CHANNELS)
@@ -96,6 +99,23 @@ class ElevenLabsRealtimeTranscriber:
 
         with self.transcript_plain_path.open("w", encoding="utf-8") as f:
             f.write("")
+
+    def _render_partial_line(self, text: str) -> None:
+        clear = " " * self.partial_render_len
+        print(f"\r{clear}\r{text}", end="", flush=True)
+        self.partial_line_active = True
+        self.partial_render_len = len(text)
+
+    def _print_committed_line(self, line: str) -> None:
+        if self.args.show_partial and self.partial_line_active:
+            clear = " " * self.partial_render_len
+            # Overwrite the current rolling partial line with final text.
+            print(f"\r{clear}\r{line}")
+            self.partial_line_active = False
+            self.partial_render_len = 0
+            self.last_partial_text = ""
+        else:
+            print(line)
 
     def _append_transcript(self, text: str) -> None:
         with self.write_lock:
@@ -148,11 +168,12 @@ class ElevenLabsRealtimeTranscriber:
         seg_txt = self.segments_dir / f"seg_{self.segment_index:05d}.txt"
         seg_txt.write_text(text + "\n", encoding="utf-8")
 
+        terminal_line = text if self.args.display == "text" else f"[{stamp}] {text}"
+
         if self.args.display == "text":
-            print(text)
-            print("")
+            self._print_committed_line(terminal_line)
         else:
-            print(f"[{stamp}] {text}")
+            self._print_committed_line(terminal_line)
 
         self._append_transcript(f"[{stamp}] {text}")
         self._append_transcript(f"segment_text: {seg_txt}")
@@ -166,9 +187,15 @@ class ElevenLabsRealtimeTranscriber:
     def _on_partial_transcript(self, data):
         if not self.args.show_partial:
             return
+
         text = (data.get("text") or "").strip()
         if text:
-            print(f"partial: {text}")
+            if text == self.last_partial_text:
+                return
+
+            # Render partial on one rolling terminal line (no repeated spam lines).
+            self._render_partial_line(text)
+            self.last_partial_text = text
 
     def _on_committed_transcript(self, data):
         if self.args.include_timestamps:
@@ -182,10 +209,22 @@ class ElevenLabsRealtimeTranscriber:
             self._handle_committed_text(data.get("text", ""))
 
     def _on_error(self, data):
+        if self.args.show_partial and self.partial_line_active:
+            clear = " " * self.partial_render_len
+            print(f"\r{clear}\r")
+            self.partial_line_active = False
+            self.partial_render_len = 0
+            self.last_partial_text = ""
         if self.args.display == "full":
             print(f"error: {data}")
 
     def _on_close(self, *_):
+        if self.args.show_partial and self.partial_line_active:
+            clear = " " * self.partial_render_len
+            print(f"\r{clear}\r")
+            self.partial_line_active = False
+            self.partial_render_len = 0
+            self.last_partial_text = ""
         if self.args.display == "full":
             print("Connection closed")
 
@@ -342,10 +381,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="text",
         help="Terminal output mode (default: text)",
     )
+    parser.set_defaults(show_partial=True)
     parser.add_argument(
         "--show-partial",
+        dest="show_partial",
         action="store_true",
-        help="Show partial transcript events",
+        help="Show rolling live partial transcript (default)",
+    )
+    parser.add_argument(
+        "--no-partial",
+        dest="show_partial",
+        action="store_false",
+        help="Disable live partial transcript and show committed lines only",
     )
     parser.add_argument(
         "--output-root",

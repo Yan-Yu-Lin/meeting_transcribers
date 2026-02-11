@@ -38,8 +38,9 @@ Notes:
 uv run python elevenlabs_realtime.py
 ```
 
-Default behavior is rolling terminal output with committed transcript lines only.
-Use `--show-partial` only when you want interim updates.
+Default behavior is rolling partial output on one line, then overwrite that line
+with the final committed text when a segment is committed.
+Use `--no-partial` if you want committed transcript lines only.
 
 Optional example with VAD tuning:
 
