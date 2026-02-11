@@ -9,6 +9,7 @@ import base64
 import datetime as dt
 import os
 import queue
+import shutil
 import threading
 import time
 import wave
@@ -83,6 +84,8 @@ class ElevenLabsRealtimeTranscriber:
         self.last_partial_text = ""
         self.partial_line_active = False
         self.partial_render_len = 0
+        self.last_committed_text = ""
+        self.last_committed_time = 0.0
 
         self.stream_wav = wave.open(str(self.stream_wav_path), "wb")
         self.stream_wav.setnchannels(CHANNELS)
@@ -100,11 +103,63 @@ class ElevenLabsRealtimeTranscriber:
         with self.transcript_plain_path.open("w", encoding="utf-8") as f:
             f.write("")
 
+    def _fit_partial_for_terminal(self, text: str) -> str:
+        width = shutil.get_terminal_size(fallback=(120, 20)).columns
+        max_len = max(20, width - 1)
+        if len(text) <= max_len:
+            return text
+        return "..." + text[-(max_len - 3) :]
+
     def _render_partial_line(self, text: str) -> None:
+        rendered = self._fit_partial_for_terminal(text)
         clear = " " * self.partial_render_len
-        print(f"\r{clear}\r{text}", end="", flush=True)
+        print(f"\r{clear}\r{rendered}", end="", flush=True)
         self.partial_line_active = True
-        self.partial_render_len = len(text)
+        self.partial_render_len = len(rendered)
+
+    def _dedupe_committed_text(self, text: str) -> str:
+        current = (text or "").strip()
+        if not current:
+            return ""
+
+        previous = self.last_committed_text
+        now = time.monotonic()
+
+        if not previous:
+            self.last_committed_text = current
+            self.last_committed_time = now
+            return current
+
+        # If commits are far apart, treat as independent segments.
+        if now - self.last_committed_time > 8.0:
+            self.last_committed_text = current
+            self.last_committed_time = now
+            return current
+
+        if current == previous:
+            return ""
+
+        if current.startswith(previous):
+            delta = current[len(previous) :].lstrip()
+            self.last_committed_text = current
+            self.last_committed_time = now
+            return delta
+
+        if previous.startswith(current):
+            return ""
+
+        max_overlap = min(len(previous), len(current), 220)
+        overlap = 0
+        for size in range(max_overlap, 19, -1):
+            if previous[-size:] == current[:size]:
+                overlap = size
+                break
+
+        self.last_committed_text = current
+        self.last_committed_time = now
+        if overlap > 0:
+            return current[overlap:].lstrip()
+        return current
 
     def _print_committed_line(self, line: str) -> None:
         if self.args.show_partial and self.partial_line_active:
@@ -159,7 +214,7 @@ class ElevenLabsRealtimeTranscriber:
                 pass
 
     def _handle_committed_text(self, text: str) -> None:
-        text = (text or "").strip()
+        text = self._dedupe_committed_text(text)
         if not text:
             return
 
