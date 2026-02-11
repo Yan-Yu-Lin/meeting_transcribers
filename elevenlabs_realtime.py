@@ -288,7 +288,7 @@ class ElevenLabsRealtimeTranscriber:
             try:
                 audio_bytes = self.audio_queue.get_nowait()
             except queue.Empty:
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.002)
                 continue
 
             payload = {
@@ -361,6 +361,7 @@ class ElevenLabsRealtimeTranscriber:
                 channels=CHANNELS,
                 dtype=np.int16,
                 blocksize=self.chunk_samples,
+                latency="low",
                 callback=self._audio_callback,
             ):
                 while not self.stop_event.is_set():
@@ -399,7 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample-rate", type=int, default=16000, help="PCM sample rate"
     )
     parser.add_argument(
-        "--chunk-ms", type=int, default=250, help="Audio chunk size in ms"
+        "--chunk-ms", type=int, default=60, help="Audio chunk size in ms"
     )
     parser.add_argument(
         "--language-code", default=None, help="Optional language code hint"
@@ -411,22 +412,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--vad-silence-threshold-secs",
         type=float,
-        default=1.2,
+        default=0.45,
         help="Silence seconds before VAD auto-commit",
     )
     parser.add_argument(
-        "--vad-threshold", type=float, default=0.4, help="VAD threshold"
+        "--vad-threshold", type=float, default=0.25, help="VAD threshold"
     )
     parser.add_argument(
         "--min-speech-duration-ms",
         type=int,
-        default=100,
+        default=50,
         help="Minimum speech duration for VAD",
     )
     parser.add_argument(
         "--min-silence-duration-ms",
         type=int,
-        default=100,
+        default=50,
         help="Minimum silence duration for VAD",
     )
 
